@@ -125,6 +125,10 @@ export const api = {
       if (isDemoMode) { await pause(150); return { user: demoUser } }
       return request(ENDPOINTS.me)
     },
+    async updateProfile(details) {
+      if (isDemoMode) { await pause(300); return { id: demoUser.id, name: details.name, email: demoUser.email } }
+      return request(ENDPOINTS.me, { method: 'PUT', body: JSON.stringify(details) })
+    },
     async logout() {
       if (isDemoMode) return {}
       return request(ENDPOINTS.logout, { method: 'POST' })

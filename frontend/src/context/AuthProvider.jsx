@@ -31,7 +31,12 @@ export default function AuthProvider({ children }) {
     setUser(response.user)
     return response.user
   }
-
+  const updateUserProfile = async (details) => {
+    const updatedUser = await api.auth.updateProfile(details)
+    setUser((prev) => ({ ...prev, ...updatedUser }))
+    return updatedUser
+  }
+  
   const logout = async () => {
     try { await api.auth.logout() } catch { /* local logout must still complete */ }
     clearToken()
