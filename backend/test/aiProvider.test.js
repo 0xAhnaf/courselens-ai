@@ -37,6 +37,9 @@ test("falls back from rejected JSON mode and parses fenced JSON", async () => {
     assert.deepEqual(result, { ok: true });
     assert.equal(payloads.length, 2);
     assert.deepEqual(payloads[0].response_format, { type: "json_object" });
+    assert.equal(payloads[0].include_reasoning, false);
+    assert.equal(payloads[0].reasoning_effort, 'low');
+    assert.equal(payloads[0].max_completion_tokens, 2500);
     assert.equal(payloads[1].response_format, undefined);
     assert.equal(payloads[1].temperature, 0);
   } finally {
@@ -72,4 +75,25 @@ test("repairs a successful response containing invalid JSON", async () => {
   } finally {
     axios.post = originalPost;
   }
+});
+
+test("honours a provider retry hint after rate limiting", async () => {
+  const originalPost = axios.post;
+  let calls = 0;
+  axios.post = async () => {
+    calls += 1;
+    if (calls === 1) {
+      const error = new Error('rate limited');
+      error.response = { status: 429, data: { error: { message: 'Rate limit reached. Please try again in 0.01s.' } } };
+      throw error;
+    }
+    return { data: { choices: [{ message: { content: '{"ok":true}' } }] } };
+  };
+  process.env.AI_PROVIDER = 'groq';
+  process.env.AI_API_KEY = 'test-key';
+  delete require.cache[require.resolve('../src/services/ai/aiProvider')];
+  try {
+    assert.deepEqual(await require('../src/services/ai/aiProvider').generateCompletion('Return JSON'), { ok: true });
+    assert.equal(calls, 2);
+  } finally { axios.post = originalPost; }
 });

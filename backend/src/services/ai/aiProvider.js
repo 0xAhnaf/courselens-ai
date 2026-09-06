@@ -34,6 +34,13 @@ const getProviderError = (error) =>
   error.message ||
   "Unknown AI provider error";
 
+const retryDelay = (error, attempt) => {
+  const headerSeconds = Number(error.response?.headers?.['retry-after']);
+  const messageMatch = getProviderError(error).match(/try again in\s+([\d.]+)s/i);
+  const seconds = Number.isFinite(headerSeconds) ? headerSeconds : Number(messageMatch?.[1]);
+  return Number.isFinite(seconds) ? Math.min(30000, Math.ceil(seconds * 1000) + 250) : 800 * attempt;
+};
+
 exports.generateCompletion = async (prompt) => {
   const provider = (process.env.AI_PROVIDER || "openrouter").toLowerCase();
   const apiKey = process.env.AI_API_KEY;
@@ -65,8 +72,13 @@ exports.generateCompletion = async (prompt) => {
       model,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
-      temperature: 0.2
+      temperature: 0.2,
+      max_completion_tokens: 2500
     };
+    if (model.startsWith('openai/gpt-oss-')) {
+      payload.include_reasoning = false;
+      payload.reasoning_effort = 'low';
+    }
   } else {
     throw new Error(`Unsupported AI provider: ${provider}`);
   }
@@ -135,7 +147,7 @@ exports.generateCompletion = async (prompt) => {
         );
       }
 
-      await wait(800 * attempt);
+      await wait(retryDelay(error, attempt));
     }
   }
 };

@@ -1,5 +1,26 @@
 const { generateCompletion } = require("./aiProvider");
-const { validateReport } = require('./reportValidation');
+const { validateReport, normalizeReport } = require('./reportValidation');
+const { auditQuestionPaper } = require('../assessmentEvidence');
+
+const addGroundedChecks = (rawReport, data) => {
+  const report = normalizeReport(rawReport);
+  if (!report || typeof report !== 'object') return report;
+  const marks = auditQuestionPaper(data.question_paper_text, data.total_marks);
+  const hadIssues = Array.isArray(report.detected_issues);
+  const hadRecommendations = Array.isArray(report.recommendations);
+  const issues = hadIssues ? report.detected_issues : [];
+  const recommendations = hadRecommendations ? report.recommendations : [];
+  if (marks.status === 'mismatch' && !issues.some((item) => item?.issue_type === 'Mark Mismatch')) {
+    issues.push({ related_question: 'Assessment', issue_type: 'Mark Mismatch', severity: 'high',
+      evidence: `Explicit numbered-question marks total ${marks.total}, while the assessment declares ${marks.expected}.`,
+      recommendation: 'Verify optional-question rules or correct the declared and individual marks before approval.' });
+  }
+  if (marks.status === 'mismatch' && !recommendations.length) recommendations.push('Reconcile the explicit question marks with the declared total before approval.');
+  if (hadIssues || marks.status === 'mismatch') report.detected_issues = issues;
+  if (hadRecommendations || marks.status === 'mismatch') report.recommendations = recommendations;
+  if (!data.previous_papers_text?.trim() && report.duplicate_questions === undefined) report.duplicate_questions = [];
+  return report;
+};
 
 exports.analyzeAssessment = async (data) => {
   const { course_title, course_code, total_marks, syllabus_text, question_paper_text, previous_papers_text } = data;
@@ -81,10 +102,18 @@ You MUST respond strictly with valid JSON conforming to this exact structure:
 }
 `;
 
-  let report = await generateCompletion(prompt);
+  let report = addGroundedChecks(await generateCompletion(prompt), data);
   let errors = validateReport(report, syllabus_text);
   if (errors.length) {
-    report = await generateCompletion(`${prompt}\nYour previous response failed these checks: ${errors.join('; ')}. Regenerate the COMPLETE report from the original documents above. Do not guess absent evidence or return a partial object.`);
+    const repairPrompt = `You are repairing one CourseLens JSON report. Return JSON only. Do not add commentary.
+Validation errors: ${errors.join('; ')}
+Keep all valid evidence already present. Correct field names, convert percentage strings to numbers, include every required array, and ensure Bloom and difficulty percentages total 100. Never invent duplicate matches or CLOs. Empty duplicate_questions is allowed only when no match was found. Empty detected_issues is allowed only when the audit found none. recommendations must contain at least one actionable string.
+Required top-level fields: overall_score, summary, coverage_percentage, clo_coverage, topic_coverage, bloom_distribution, difficulty_distribution, duplicate_questions, detected_issues, recommendations.
+Supplied CLO identifiers: ${[...new Set((String(syllabus_text).match(/\bCLO\s*\d+\b/gi) || []).map((clo) => clo.replace(/\s/g, '').toUpperCase()))].join(', ') || 'none'}
+Previous papers supplied: ${Boolean(previous_papers_text?.trim())}
+Report to repair:
+${JSON.stringify(report)}`;
+    report = addGroundedChecks(await generateCompletion(repairPrompt), data);
     errors = validateReport(report, syllabus_text);
   }
   if (errors.length) throw new Error('AI returned an incomplete report. Please retry with clear, shorter course materials. Missing/invalid sections: ' + errors.join('; '));
