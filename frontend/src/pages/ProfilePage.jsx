@@ -3,20 +3,7 @@ import { useAuth } from '../context/authContext'
 import { api } from '../services/api'
 
 export default function ProfilePage() {
-  const { user, updateUserProfile } = useAuth()
-  const [name, setName] = useState(user?.name || '')
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const save = async (event) => {
-    event.preventDefault()
-    setError(''); setMessage('')
-    if (name.trim().length < 2 || name.trim().length > 100) return setError('Name must be between 2 and 100 characters.')
-    setSaving(true)
-    try { await updateUserProfile({ name: name.trim() }); setMessage('Your profile has been updated.') }
-    catch (err) { setError(err.message) }
-    finally { setSaving(false) }
-  }
+  const { user } = useAuth()
   const [stats, setStats] = useState({ total: 0, completed: 0 })
 
   useEffect(() => {
@@ -25,14 +12,11 @@ export default function ProfilePage() {
         const completed = items.filter((item) => String(item.status).toLowerCase() === 'completed').length
         setStats({ total: items.length, completed })
       })
-      .catch(() => setError('Analysis statistics could not be loaded. Refresh to try again.'))
+      .catch(() => {})
   }, [])
 
   return (
     <div className="page-stack">
-      <section className="page-intro"><div><span className="eyebrow">Your account</span><h2>Faculty profile</h2><p>Your details, connected to every review.</p></div></section>
-      {error && <div className="alert alert--error" role="alert">{error}</div>}
-      {message && <div className="faculty-notice" role="status">{message}</div>}
       <section className="metric-grid metric-grid--two" aria-label="Profile summary">
         <article className="metric-card">
           <span>Total Analyses</span>
@@ -53,11 +37,6 @@ export default function ProfilePage() {
             <p>Your CourseLens account details</p>
           </div>
         </div>
-
-        <form className="auth-form profile-edit" onSubmit={save}>
-          <label htmlFor="profile-name">Full name<input id="profile-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} autoComplete="name" required /></label>
-          <button className="button button--primary" disabled={saving} type="submit">{saving ? 'Saving…' : 'Save profile'}</button>
-        </form>
 
         <div style={{ display: 'grid', gap: '1.25rem', maxWidth: '480px', marginTop: '0.5rem' }}>
           <div>
