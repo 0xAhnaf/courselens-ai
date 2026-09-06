@@ -18,7 +18,7 @@ export default function PublicHeader() {
         <nav className={`public-nav ${open ? 'is-open' : ''}`} aria-label="Public navigation">
           <a href="/#how-it-works" onClick={() => setOpen(false)}>How it works</a>
           <a href="/#features" onClick={() => setOpen(false)}>Features</a>
-          
+
           {isAuthenticated ? (
             <>
               <NavLink to="/dashboard" onClick={() => setOpen(false)}>Dashboard</NavLink>

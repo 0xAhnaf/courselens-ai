@@ -42,29 +42,29 @@ export default function AppLayout() {
           </nav>
         </div>
         <div className="sidebar-profile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-          <Link 
-            to="/profile" 
-            className="sidebar-profile__info" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.75rem', 
-              textDecoration: 'none', 
-              color: 'inherit', 
-              minWidth: 0, 
-              flex: 1 
+          <Link
+            to="/profile"
+            className="sidebar-profile__info"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              textDecoration: 'none',
+              color: 'inherit',
+              minWidth: 0,
+              flex: 1
             }}
           >
             <div className="avatar" style={{ flexShrink: 0 }}>
               {(user?.name || 'F').charAt(0).toUpperCase()}
             </div>
-            <div 
-              className="sidebar-profile__copy" 
-              style={{ 
-                minWidth: 0, 
-                overflow: 'hidden', 
-                textOverflow: 'ellipsis', 
-                whiteSpace: 'nowrap' 
+            <div
+              className="sidebar-profile__copy"
+              style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
               }}
             >
               <strong style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -75,11 +75,11 @@ export default function AppLayout() {
               </span>
             </div>
           </Link>
-          <button 
+          <button
             type="button"
-            onClick={logout} 
-            aria-label="Sign out" 
-            title="Sign out" 
+            onClick={logout}
+            aria-label="Sign out"
+            title="Sign out"
             style={{
               display: 'flex',
               alignItems: 'center',
