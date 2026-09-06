@@ -141,7 +141,8 @@ export const api = {
       if (isDemoMode) { await pause(); return { ...demoResult, id } }
       const payload = await request(`${ENDPOINTS.analyses}/${id}`)
       const analysis = normalizeAnalysis(payload.analysis || payload)
-      return { ...analysis, ...normalizeResult(analysis.result || analysis.result_json || {}) }
+      const result = normalizeResult(analysis.result || analysis.result_json || {})
+      return { ...analysis, ...result, result }
     },
     async create(details) {
       if (isDemoMode) { await pause(1400); return { ...demoResult, id: `demo-${Date.now()}` } }
