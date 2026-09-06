@@ -3,6 +3,31 @@ const axios = require("axios");
 const MAX_ATTEMPTS = 3;
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+const parseJsonContent = (content) => {
+  if (typeof content !== "string" || !content.trim()) {
+    throw new Error("AI provider returned an empty response");
+  }
+
+  const withoutFence = content
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  try {
+    return JSON.parse(withoutFence);
+  } catch {
+    const firstBrace = withoutFence.indexOf("{");
+    const lastBrace = withoutFence.lastIndexOf("}");
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(withoutFence.slice(firstBrace, lastBrace + 1));
+    }
+
+    throw new Error("AI provider returned invalid JSON");
+  }
+};
+
 const getProviderError = (error) =>
   error.response?.data?.error?.message ||
   error.response?.data?.message ||
@@ -46,22 +71,57 @@ exports.generateCompletion = async (prompt) => {
     throw new Error(`Unsupported AI provider: ${provider}`);
   }
 
+  let jsonModeEnabled = true;
+  let invalidContent = "";
+
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      const response = await axios.post(endpoint, payload, {
+      const attemptPayload = {
+        ...payload,
+        temperature: jsonModeEnabled ? 0.2 : 0,
+        messages: invalidContent
+          ? [
+              {
+                role: "system",
+                content: "Repair the supplied content into one valid JSON object. Return JSON only, with no markdown or commentary. Preserve the original fields and meaning."
+              },
+              { role: "user", content: invalidContent }
+            ]
+          : payload.messages
+      };
+
+      if (!jsonModeEnabled) delete attemptPayload.response_format;
+
+      const response = await axios.post(endpoint, attemptPayload, {
         headers,
         timeout: 60000
       });
 
       const content = response.data?.choices?.[0]?.message?.content;
-
-      if (typeof content !== "string" || !content.trim()) {
-        throw new Error("AI provider returned an empty response");
+      try {
+        return parseJsonContent(content);
+      } catch (parseError) {
+        invalidContent = content || "";
+        jsonModeEnabled = false;
+        throw parseError;
       }
-
-      return JSON.parse(content);
     } catch (error) {
       const status = error.response?.status;
+      const providerMessage = getProviderError(error);
+      const jsonGenerationFailure =
+        status === 400 &&
+        /validate json|failed_generation|json/i.test(providerMessage);
+
+      if (jsonGenerationFailure) {
+        const failedGeneration = error.response?.data?.error?.failed_generation;
+        if (typeof failedGeneration === "string") {
+          try {
+            return parseJsonContent(failedGeneration);
+          } catch {}
+        }
+        jsonModeEnabled = false;
+      }
+
       const retryable =
         !status ||
         status === 400 ||
@@ -71,7 +131,7 @@ exports.generateCompletion = async (prompt) => {
 
       if (!retryable || attempt === MAX_ATTEMPTS) {
         throw new Error(
-          `AI provider request failed: ${getProviderError(error)}`
+          `AI provider request failed: ${providerMessage}`
         );
       }
 
