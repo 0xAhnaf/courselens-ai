@@ -21,7 +21,7 @@ exports.register = (req, res) => {
       }
       const token = jwt.sign(
         { id: this.lastID, email },
-        process.env.JWT_SECRET || "supersecretkey",
+        process.env.JWT_SECRET,
         { expiresIn: "24h" }
       );
       res.status(201).json({ token, user: { id: this.lastID, name, email } });
@@ -43,7 +43,7 @@ exports.login = (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, email: user.email },
-      process.env.JWT_SECRET || "supersecretkey",
+      process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
     res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
@@ -64,16 +64,27 @@ exports.me = (req, res) => {
 // PUT /api/auth/me - Update user profile name
 exports.updateProfile = (req, res) => {
   const { name } = req.body;
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: "Name is required." });
+  const normalizedName = typeof name === "string" ? name.trim() : "";
+
+  if (normalizedName.length < 2 || normalizedName.length > 100) {
+    return res.status(400).json({ error: "Name must contain between 2 and 100 characters." });
   }
 
   db.run(
     `UPDATE users SET name = ? WHERE id = ?`,
-    [name.trim(), req.user.id],
+    [normalizedName, req.user.id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: req.user.id, name: name.trim(), email: req.user.email });
+      if (this.changes === 0) return res.status(404).json({ error: "User not found." });
+
+      db.get(
+        "SELECT id, name, email, created_at FROM users WHERE id = ?",
+        [req.user.id],
+        (selectErr, user) => {
+          if (selectErr) return res.status(500).json({ error: selectErr.message });
+          return res.json(user);
+        }
+      );
     }
   );
 };

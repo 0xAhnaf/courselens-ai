@@ -1,6 +1,32 @@
 const db = require("../config/db");
 const { analyzeAssessment } = require("../services/ai/assessmentAgent");
 
+const runAnalysisJob = (analysisId, data) => {
+  analyzeAssessment(data)
+    .then((aiResult) => {
+      const overallScore = aiResult.overall_score || 0;
+      const resultJson = JSON.stringify(aiResult);
+
+      db.run(
+        `UPDATE analyses SET status = 'completed', overall_score = ?, result_json = ?, error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'processing'`,
+        [overallScore, resultJson, analysisId],
+        (updateErr) => {
+          if (updateErr) console.error("Failed to save AI result for ID", analysisId, ":", updateErr.message);
+        }
+      );
+    })
+    .catch((aiErr) => {
+      console.error("AI Analysis failed for ID", analysisId, ":", aiErr.message);
+      db.run(
+        `UPDATE analyses SET status = 'failed', overall_score = NULL, result_json = NULL, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'processing'`,
+        [aiErr.message || "AI Analysis execution failed", analysisId],
+        (updateErr) => {
+          if (updateErr) console.error("Failed to save AI error for ID", analysisId, ":", updateErr.message);
+        }
+      );
+    });
+};
+
 // POST /api/analyses - Create & trigger background AI audit
 exports.createAnalysis = (req, res) => {
   const userId = req.user.id;
@@ -44,23 +70,14 @@ exports.createAnalysis = (req, res) => {
       });
 
       // 2. Trigger AI analysis asynchronously
-      analyzeAssessment({ course_title, course_code, total_marks, syllabus_text, question_paper_text, previous_papers_text })
-        .then((aiResult) => {
-          const overallScore = aiResult.overall_score || 0;
-          const resultJson = JSON.stringify(aiResult);
-
-          db.run(
-            `UPDATE analyses SET status = 'completed', overall_score = ?, result_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [overallScore, resultJson, analysisId]
-          );
-        })
-        .catch((aiErr) => {
-          console.error("AI Analysis failed for ID", analysisId, ":", aiErr.message);
-          db.run(
-            `UPDATE analyses SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-            [aiErr.message || "AI Analysis execution failed", analysisId]
-          );
-        });
+      runAnalysisJob(analysisId, {
+        course_title,
+        course_code,
+        total_marks,
+        syllabus_text,
+        question_paper_text,
+        previous_papers_text
+      });
     }
   );
 };
@@ -79,9 +96,15 @@ exports.getUserAnalyses = (req, res) => {
 
 // GET /api/analyses/:id - Get single analysis result
 exports.getAnalysisById = (req, res) => {
+  const analysisId = Number(req.params.id);
+
+  if (!Number.isInteger(analysisId) || analysisId < 1) {
+    return res.status(400).json({ error: "Invalid analysis ID." });
+  }
+
   db.get(
     `SELECT * FROM analyses WHERE id = ? AND user_id = ?`,
-    [req.params.id, req.user.id],
+    [analysisId, req.user.id],
     (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: "Analysis record not found." });
@@ -100,9 +123,15 @@ exports.getAnalysisById = (req, res) => {
 
 // DELETE /api/analyses/:id - Delete analysis
 exports.deleteAnalysis = (req, res) => {
+  const analysisId = Number(req.params.id);
+
+  if (!Number.isInteger(analysisId) || analysisId < 1) {
+    return res.status(400).json({ error: "Invalid analysis ID." });
+  }
+
   db.run(
     `DELETE FROM analyses WHERE id = ? AND user_id = ?`,
-    [req.params.id, req.user.id],
+    [analysisId, req.user.id],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       if (this.changes === 0) return res.status(404).json({ error: "Analysis not found or unauthorized." });
@@ -113,8 +142,12 @@ exports.deleteAnalysis = (req, res) => {
 
 // POST /api/analyses/:id/retry - Retry a failed or processing analysis
 exports.retryAnalysis = (req, res) => {
-  const analysisId = req.params.id;
+  const analysisId = Number(req.params.id);
   const userId = req.user.id;
+
+  if (!Number.isInteger(analysisId) || analysisId < 1) {
+    return res.status(400).json({ error: "Invalid analysis ID." });
+  }
 
   db.get(
     `SELECT * FROM analyses WHERE id = ? AND user_id = ?`,
@@ -123,34 +156,27 @@ exports.retryAnalysis = (req, res) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: "Analysis not found." });
 
+      if (row.status === "processing") {
+        return res.status(409).json({ error: "This analysis is already processing." });
+      }
+
       db.run(
-        `UPDATE analyses SET status = 'processing', error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-        [analysisId],
-        (updateErr) => {
+        `UPDATE analyses SET status = 'processing', overall_score = NULL, result_json = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND status != 'processing'`,
+        [analysisId, userId],
+        function (updateErr) {
           if (updateErr) return res.status(500).json({ error: updateErr.message });
+          if (this.changes === 0) return res.status(409).json({ error: "This analysis is already processing." });
 
-          res.json({ id: parseInt(analysisId), status: "processing", message: "Analysis re-triggered successfully." });
+          res.status(202).json({ id: analysisId, status: "processing", message: "Analysis re-triggered successfully." });
 
-          analyzeAssessment({
+          runAnalysisJob(analysisId, {
             course_title: row.course_title,
             course_code: row.course_code,
             total_marks: row.total_marks,
             syllabus_text: row.syllabus_text,
             question_paper_text: row.question_paper_text,
             previous_papers_text: row.previous_papers_text
-          })
-            .then((aiResult) => {
-              db.run(
-                `UPDATE analyses SET status = 'completed', overall_score = ?, result_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [aiResult.overall_score || 0, JSON.stringify(aiResult), analysisId]
-              );
-            })
-            .catch((aiErr) => {
-              db.run(
-                `UPDATE analyses SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [aiErr.message || "AI Analysis execution failed", analysisId]
-              );
-            });
+          });
         }
       );
     }

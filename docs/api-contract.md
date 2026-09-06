@@ -1,27 +1,41 @@
-# CourseLens AI — API Contract
+# CourseLens AI API Contract
 
-**Base URL:** `http://localhost:3000/api`
+Base URL: `http://localhost:3000/api`
 
----
-
-## Authorization Header
-
-For all protected routes, supply the JWT token received during login/registration:
+JSON endpoints use `Content-Type: application/json`. Protected endpoints require:
 
 ```http
-Authorization: Bearer <your_jwt_token>
+Authorization: Bearer <jwt_token>
 ```
 
----
+Error responses use this shape:
 
-# Authentication Endpoints
+```json
+{ "error": "Human-readable error message." }
+```
 
-## 1. Register User
+## Health
 
-- **Endpoint:** `POST /auth/register`
-- **Auth Required:** No
+### `GET /health`
 
-### Request Body
+Authentication: not required.
+
+Response `200 OK`:
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-09-06T10:50:00.000Z"
+}
+```
+
+## Authentication
+
+### `POST /auth/register`
+
+Authentication: not required.
+
+Request:
 
 ```json
 {
@@ -31,11 +45,11 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
-### Response — `201 Created`
+Response `201 Created`:
 
 ```json
 {
-  "token": "JWT_TOKEN_STRING",
+  "token": "JWT_TOKEN",
   "user": {
     "id": 1,
     "name": "Faculty Name",
@@ -44,14 +58,13 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
----
+Errors: `400` for missing fields or an existing email.
 
-## 2. Login User
+### `POST /auth/login`
 
-- **Endpoint:** `POST /auth/login`
-- **Auth Required:** No
+Authentication: not required.
 
-### Request Body
+Request:
 
 ```json
 {
@@ -60,11 +73,11 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
-### Response — `200 OK`
+Response `200 OK`:
 
 ```json
 {
-  "token": "JWT_TOKEN_STRING",
+  "token": "JWT_TOKEN",
   "user": {
     "id": 1,
     "name": "Faculty Name",
@@ -73,14 +86,13 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
----
+Errors: `400` for missing or invalid credentials.
 
-## 3. Get Current User
+### `GET /auth/me`
 
-- **Endpoint:** `GET /auth/me`
-- **Auth Required:** Yes
+Authentication: required.
 
-### Response — `200 OK`
+Response `200 OK`:
 
 ```json
 {
@@ -91,33 +103,89 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
----
+### `PUT /auth/me`
 
-# Analysis Endpoints
+Authentication: required.
 
-## 4. Create New Analysis
+Request:
 
-- **Endpoint:** `POST /analyses`
-- **Auth Required:** Yes
+```json
+{ "name": "Updated Faculty Name" }
+```
 
-### Request Body
+The trimmed name must contain 2-100 characters.
+
+Response `200 OK`:
+
+```json
+{
+  "id": 1,
+  "name": "Updated Faculty Name",
+  "email": "faculty@aust.edu",
+  "created_at": "2026-09-06 10:48:00"
+}
+```
+
+Errors: `400` for an invalid name and `404` if the user no longer exists.
+
+## Document extraction
+
+### `POST /documents/extract`
+
+Authentication: required.
+
+Content type: `multipart/form-data` with one field named `file`.
+
+- Accepted formats: text-based PDF and UTF-8 TXT.
+- Maximum upload size: 5 MB.
+- Maximum extracted text: 250,000 characters.
+- Files are processed in memory and are not stored by the server.
+- Image-only/scanned PDF OCR is not supported.
+
+Response `200 OK`:
+
+```json
+{
+  "file_name": "syllabus.pdf",
+  "text": "Extracted plain-text content...",
+  "page_count": 3
+}
+```
+
+Errors:
+
+- `400`: missing file, unsupported type, invalid PDF, binary TXT, unreadable or password-protected document.
+- `401`: missing or invalid JWT.
+- `413`: file exceeds 5 MB or extracted text exceeds 250,000 characters.
+
+The frontend should call this endpoint when a document is selected, store the returned `text`, and then submit the normal JSON analysis request below.
+
+## Analyses
+
+All analysis endpoints require authentication and only access records owned by the authenticated user.
+
+### `POST /analyses`
+
+Request:
 
 ```json
 {
   "course_title": "Algorithms",
-  "course_code": "CSE 2201",
+  "course_code": "CSE 3101",
   "department": "CSE",
-  "exam_type": "Final",
+  "exam_type": "Final examination",
   "semester": "Fall 2026",
   "exam_date": "2026-09-10",
   "total_marks": 50,
-  "syllabus_text": "CLO1: Analyze time complexity of DP...\nCLO2: Graph algorithms...",
-  "question_paper_text": "Q1: Explain knapsack... (10 marks)",
-  "previous_papers_text": "2025 Fall Q1: Write BFS algorithm."
+  "syllabus_text": "CLO1: Analyze time complexity...",
+  "question_paper_text": "Q1: Analyze merge sort. [10]",
+  "previous_papers_text": "2025 Fall Q1: Analyze merge sort."
 }
 ```
 
-### Response — `202 Accepted`
+`department`, `exam_type`, `semester`, `exam_date`, and `previous_papers_text` may be empty. The other fields are required.
+
+Response `202 Accepted`:
 
 ```json
 {
@@ -127,23 +195,20 @@ Authorization: Bearer <your_jwt_token>
 }
 ```
 
----
+The AI job continues asynchronously. Poll `GET /analyses/:id` until `status` becomes `completed` or `failed`.
 
-## 5. Get User Analyses List
+### `GET /analyses`
 
-- **Endpoint:** `GET /analyses`
-- **Auth Required:** Yes
-
-### Response — `200 OK`
+Response `200 OK`:
 
 ```json
 [
   {
     "id": 1,
     "course_title": "Algorithms",
-    "course_code": "CSE 2201",
+    "course_code": "CSE 3101",
     "department": "CSE",
-    "exam_type": "Final",
+    "exam_type": "Final examination",
     "semester": "Fall 2026",
     "status": "completed",
     "overall_score": 85,
@@ -152,25 +217,16 @@ Authorization: Bearer <your_jwt_token>
 ]
 ```
 
----
+### `GET /analyses/:id`
 
-## 6. Get Analysis Details
-
-- **Endpoint:** `GET /analyses/:id`
-- **Auth Required:** Yes
-
-### Response — `200 OK`
+Response `200 OK` includes the stored course inputs and a parsed `result_json` object when completed:
 
 ```json
 {
   "id": 1,
   "user_id": 1,
   "course_title": "Algorithms",
-  "course_code": "CSE 2201",
-  "department": "CSE",
-  "exam_type": "Final",
-  "semester": "Fall 2026",
-  "exam_date": "2026-09-10",
+  "course_code": "CSE 3101",
   "total_marks": 50,
   "syllabus_text": "...",
   "question_paper_text": "...",
@@ -180,152 +236,28 @@ Authorization: Bearer <your_jwt_token>
   "error_message": null,
   "result_json": {
     "overall_score": 85,
-    "summary": "High alignment with CLO targets.",
+    "summary": "High alignment with the course outcomes.",
     "coverage_percentage": 80,
-    "clo_coverage": [
-      {
-        "clo": "CLO1",
-        "covered": true,
-        "question_numbers": ["Q1"]
-      }
-    ],
-    "topic_coverage": [
-      {
-        "topic": "Dynamic Programming",
-        "covered": true
-      }
-    ],
-    "bloom_distribution": {
-      "remember": 20,
-      "understand": 30,
-      "apply": 30,
-      "analyze": 10,
-      "evaluate": 10,
-      "create": 0
-    },
-    "difficulty_distribution": {
-      "easy": 30,
-      "medium": 50,
-      "hard": 20
-    },
-    "duplicate_questions": [
-      {
-        "current_question": "Q2",
-        "matched_previous_question": "2025 Fall Q1",
-        "similarity_score": 85,
-        "recommendation": "Modify parameters"
-      }
-    ],
-    "detected_issues": [
-      {
-        "related_question": "Q3",
-        "issue_type": "Mark Mismatch",
-        "severity": "high",
-        "evidence": "Header mark total mismatch",
-        "recommendation": "Adjust Q3 marks to equal 10"
-      }
-    ],
-    "recommendations": [
-      "Increase higher-order application questions"
-    ]
+    "clo_coverage": [],
+    "topic_coverage": [],
+    "bloom_distribution": {},
+    "difficulty_distribution": {},
+    "duplicate_questions": [],
+    "detected_issues": [],
+    "recommendations": []
   },
   "created_at": "2026-09-06 10:50:00",
   "updated_at": "2026-09-06 10:50:08"
 }
 ```
 
----
+Errors: `400` for an invalid ID and `404` for a missing or unauthorized record.
 
-## 7. Delete Analysis
+### `POST /analyses/:id/retry`
 
-- **Endpoint:** `DELETE /analyses/:id`
-- **Auth Required:** Yes
+Reuses the stored inputs and starts the AI job again. The old score, result, and error are cleared before processing begins.
 
-### Response — `200 OK`
-
-```json
-{
-  "message": "Analysis deleted successfully."
-}
-```
-
----
-
-# Step 7 — Sync: Push Backend Changes to Remote
-
-Now push all your working backend code and documentation to `origin/ahnaf-backend` so it is safely backed up.
-
-Run these commands in **PowerShell**:
-
-```powershell
-git status --short
-git add .
-git commit -m "feat(backend): complete sqlite db, auth endpoints, AI assessment agent, and api contract"
-git push origin ahnaf-backend
-```
-
-
-### 8. Extract Text from PDF/TXT Document
-
-* **Endpoint:** `POST /api/documents/extract`
-* **Auth Required:** Yes
-* **Content-Type:** `multipart/form-data`
-* **Body Field:** `file`
-* **Accepted File Types:** PDF or TXT
-* **Maximum File Size:** 5 MB
-
-**Response — `200 OK`:**
-
-```json
-{
-  "file_name": "syllabus.pdf",
-  "text": "Extracted document plain text content...",
-  "page_count": 3
-}
-```
-
-**Error Response — `400 Bad Request`:**
-
-```json
-{
-  "error": "Readable text could not be extracted from this document. OCR is currently unsupported."
-}
-```
-
----
-
-### 9. Update Profile Name
-
-* **Endpoint:** `PUT /api/auth/me`
-* **Auth Required:** Yes
-* **Content-Type:** `application/json`
-
-**Request Body:**
-
-```json
-{
-  "name": "Updated Faculty Name"
-}
-```
-
-**Response — `200 OK`:**
-
-```json
-{
-  "id": 1,
-  "name": "Updated Faculty Name",
-  "email": "faculty@aust.edu"
-}
-```
-
----
-
-### 10. Retry Failed Analysis
-
-* **Endpoint:** `POST /api/analyses/:id/retry`
-* **Auth Required:** Yes
-
-**Response — `200 OK`:**
+Response `202 Accepted`:
 
 ```json
 {
@@ -335,12 +267,30 @@ git push origin ahnaf-backend
 }
 ```
 
----
+Errors:
 
-## Step 2: Install Backend Dependencies for PDF & File Uploads
+- `400`: invalid analysis ID.
+- `404`: missing or unauthorized analysis.
+- `409`: the analysis is already processing; a duplicate AI job is not started.
 
-From the `backend` directory in PowerShell, install `multer` and `pdf-parse`:
+### `DELETE /analyses/:id`
 
-```powershell
-npm install multer pdf-parse
+Response `200 OK`:
+
+```json
+{ "message": "Analysis deleted successfully." }
+```
+
+Errors: `400` for an invalid analysis ID and `404` for a missing or unauthorized analysis.
+
+## Request-size behavior
+
+JSON request bodies are limited to 1 MB. Oversized JSON requests return:
+
+```http
+413 Payload Too Large
+```
+
+```json
+{ "error": "Request body exceeds the 1 MB limit." }
 ```
