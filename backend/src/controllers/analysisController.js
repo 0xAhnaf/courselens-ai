@@ -110,3 +110,49 @@ exports.deleteAnalysis = (req, res) => {
     }
   );
 };
+
+// POST /api/analyses/:id/retry - Retry a failed or processing analysis
+exports.retryAnalysis = (req, res) => {
+  const analysisId = req.params.id;
+  const userId = req.user.id;
+
+  db.get(
+    `SELECT * FROM analyses WHERE id = ? AND user_id = ?`,
+    [analysisId, userId],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: "Analysis not found." });
+
+      db.run(
+        `UPDATE analyses SET status = 'processing', error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [analysisId],
+        (updateErr) => {
+          if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+          res.json({ id: parseInt(analysisId), status: "processing", message: "Analysis re-triggered successfully." });
+
+          analyzeAssessment({
+            course_title: row.course_title,
+            course_code: row.course_code,
+            total_marks: row.total_marks,
+            syllabus_text: row.syllabus_text,
+            question_paper_text: row.question_paper_text,
+            previous_papers_text: row.previous_papers_text
+          })
+            .then((aiResult) => {
+              db.run(
+                `UPDATE analyses SET status = 'completed', overall_score = ?, result_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [aiResult.overall_score || 0, JSON.stringify(aiResult), analysisId]
+              );
+            })
+            .catch((aiErr) => {
+              db.run(
+                `UPDATE analyses SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                [aiErr.message || "AI Analysis execution failed", analysisId]
+              );
+            });
+        }
+      );
+    }
+  );
+};

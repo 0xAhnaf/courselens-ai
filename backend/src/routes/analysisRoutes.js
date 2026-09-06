@@ -9,5 +9,6 @@ router.post("/", analysisController.createAnalysis);
 router.get("/", analysisController.getUserAnalyses);
 router.get("/:id", analysisController.getAnalysisById);
 router.delete("/:id", analysisController.deleteAnalysis);
+router.post("/:id/retry", analysisController.retryAnalysis);
 
 module.exports = router;

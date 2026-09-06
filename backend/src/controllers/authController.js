@@ -60,3 +60,20 @@ exports.me = (req, res) => {
     }
   );
 };
+
+// PUT /api/auth/me - Update user profile name
+exports.updateProfile = (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: "Name is required." });
+  }
+
+  db.run(
+    `UPDATE users SET name = ? WHERE id = ?`,
+    [name.trim(), req.user.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: req.user.id, name: name.trim(), email: req.user.email });
+    }
+  );
+};
