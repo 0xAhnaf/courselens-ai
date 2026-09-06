@@ -153,6 +153,14 @@ export const api = {
     },
   },
   analyses: {
+    async getReview(id) {
+      if (isDemoMode) throw new Error('Faculty review requires a live backend; demo reviews are not saved.')
+      return request(`${ENDPOINTS.analyses}/${id}/review`)
+    },
+    async saveReview(id, review) {
+      if (isDemoMode) throw new Error('Faculty review requires a live backend.')
+      return request(`${ENDPOINTS.analyses}/${id}/review`, { method: 'PUT', body: JSON.stringify(review) })
+    },
     async retry(id) {
       if (isDemoMode) return { ...demoResult, id }
       return normalizeAnalysis(await request(`${ENDPOINTS.analyses}/${id}/retry`, { method: 'POST' }))

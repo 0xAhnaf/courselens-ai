@@ -74,7 +74,23 @@ button:disabled { cursor: wait; opacity: .6; }
   .report-actions { width: 100%; }
   .report-actions .button { flex: 1; }
 }
+.faculty-review form { padding: 24px; display: grid; gap: 12px; }
+.faculty-review label { font-weight: 650; }
+.faculty-review select,.faculty-review textarea { width: 100%; padding: 12px; border: 1px solid #cddfd6; border-radius: 10px; background: #fff; color: #17352a; font: inherit; }
+.faculty-review textarea { resize: vertical; }
+.faculty-review .button { justify-self: start; }
+.faculty-review small,.faculty-review form > p { color: #526b60; }
+.marks-check { margin: 20px; padding: 18px; border-radius: 12px; background: #edf7f1; display: grid; gap: 7px; }
+.marks-check--mismatch,.marks-check--manual_check { background: #fff6e5; color: #704c14; }
+.marks-check p { font-size: 13px; line-height: 1.6; margin: 0; }
+.evidence-list { padding: 0 20px 20px; }
+.evidence-list details { border-top: 1px solid #e1ece6; }
+.evidence-list summary { cursor: pointer; display: flex; gap: 14px; padding: 15px 0; align-items: center; flex-wrap: wrap; }
+.evidence-list summary span { font-size: 12px; color: #526b60; }
+.evidence-list summary span:last-child { margin-left: auto; }
+.evidence-list pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 13px; line-height: 1.7; padding: 15px; background: #f5f9f7; border-radius: 8px; }
 @media print {
+  .faculty-review button { display: none; }
   .sidebar,.app-header,.report-actions,.report-page > .alert,.public-header { display: none !important; }
   .app-main { padding: 0 !important; }
   .app-content { width: 100%; padding: 0; }

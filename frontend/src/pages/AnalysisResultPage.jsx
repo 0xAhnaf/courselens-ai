@@ -3,6 +3,8 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '../components/FeedbackState'
 import Icon from '../components/Icon'
 import StatusBadge from '../components/StatusBadge'
+import FacultyReview from '../components/FacultyReview'
+import SourceEvidence from '../components/SourceEvidence'
 import { api } from '../services/api'
 import { displayScore, formatDate } from '../utils/format'
 
@@ -91,6 +93,7 @@ export default function AnalysisResultPage() {
 
       <div className="report-grid">
         <div className="report-column">
+          <SourceEvidence audit={analysis?.evidence_audit} />
           {topics.length > 0 && <section className="panel report-section"><div className="panel__header"><div><h3>Topic-level evidence</h3><p>What this assessment includes—and leaves out</p></div></div><div className="topic-grid">{topics.map((topic, index) => <div className="topic-row" key={index}><span>{topic.topic}</span><StatusBadge status={topic.covered ? 'covered' : 'missing'} /></div>)}</div></section>}
           <section className="panel report-section"><div className="panel__header"><div><h3>Course coverage</h3><p>Learning outcomes represented in the paper</p></div><span className="status status--completed">{coverage.length} outcomes</span></div>{coverage.length ? <div className="coverage-list">{coverage.map((item, index) => <div key={item.code || index}><div><strong>{item.code || `Outcome ${index + 1}`}</strong><span>{item.title || item.description}</span></div><div><span>{item.marks != null ? `${item.marks} marks` : ''}</span><StatusBadge status={item.status || 'partial'} /></div></div>)}</div> : <p className="section-empty">Coverage details were not returned.</p>}</section>
 
@@ -105,6 +108,7 @@ export default function AnalysisResultPage() {
           <section className="panel report-section recommendation-section"><div className="panel__header"><div><h3>Prioritized recommendations</h3><p>Suggested next steps for faculty review</p></div></div>{recommendations.length ? <ol>{recommendations.map((item, index) => <li key={index}><span>{index + 1}</span><p>{typeof item === 'string' ? item : item.text || item.recommendation}</p></li>)}</ol> : <p className="section-empty">No recommendations were returned.</p>}<div className="faculty-notice"><Icon name="shield" size={19} /><p><strong>You remain in control</strong><span>AI findings are advisory and should be checked against your academic standards.</span></p></div></section>
         </div>
       </div>
+      <FacultyReview key={id} id={id} />
     </article>
   )
 }

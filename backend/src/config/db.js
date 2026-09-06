@@ -16,6 +16,11 @@ const db = new sqlite3.Database(dbPath, (err) => {
 });
 
 db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS analysis_reviews (
+    analysis_id INTEGER PRIMARY KEY, decision TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '', report_hash TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +54,8 @@ db.serialize(() => {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
+  db.run(`CREATE TRIGGER IF NOT EXISTS remove_analysis_review AFTER DELETE ON analyses
+    BEGIN DELETE FROM analysis_reviews WHERE analysis_id = OLD.id; END`);
 });
 
 module.exports = db;

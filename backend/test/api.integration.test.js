@@ -62,6 +62,34 @@ const waitForStatus = async (analysisId, expectedStatus) => {
 
 const authenticatedHeaders = () => ({ Authorization: `Bearer ${token}` });
 
+test('faculty review persists, validates ownership and detects changed reports', async () => {
+  const inserted = await run(`INSERT INTO analyses (user_id, course_title, course_code, total_marks, syllabus_text, question_paper_text, status, result_json)
+    VALUES (?, 'Review test', 'CSE101', 10, 'CLO1', 'Q1. Explain sorting. [10]', 'completed', ?)`, [userId, '{"summary":"original"}']);
+  const url = `${baseUrl}/api/analyses/${inserted.lastID}/review`;
+  const headers = { ...authenticatedHeaders(), 'Content-Type': 'application/json' };
+  assert.equal((await fetch(url)).status, 401);
+  let response = await fetch(url, { headers });
+  const initial = await response.json();
+  assert.equal(initial.decision, 'pending');
+  const body = { decision: 'needs_revision', note: 'Include CLO4 before approval.', report_hash: initial.report_hash };
+  response = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+  assert.equal(response.status, 200);
+  response = await fetch(url, { headers });
+  assert.equal((await response.json()).note, body.note);
+  assert.equal((await fetch(url, { method: 'PUT', headers, body: JSON.stringify({ ...body, decision: 'fake' }) })).status, 400);
+  assert.equal((await fetch(url, { method: 'PUT', headers, body: JSON.stringify({ ...body, note: 'x'.repeat(2001) }) })).status, 400);
+  const other = jwt.sign({ id: userId + 1000 }, process.env.JWT_SECRET);
+  assert.equal((await fetch(url, { headers: { Authorization: `Bearer ${other}` } })).status, 404);
+  assert.equal((await fetch(url, { method: 'PUT', headers: { ...headers, Authorization: `Bearer ${other}` }, body: JSON.stringify(body) })).status, 404);
+  await run('UPDATE analyses SET result_json = ? WHERE id = ?', ['{"summary":"regenerated"}', inserted.lastID]);
+  assert.equal((await (await fetch(url, { headers })).json()).stale, true);
+  assert.equal((await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) })).status, 409);
+  const detail = await (await fetch(`${baseUrl}/api/analyses/${inserted.lastID}`, { headers })).json();
+  assert.equal(detail.evidence_audit.status, 'matched');
+  await run('DELETE FROM analyses WHERE id = ?', [inserted.lastID]);
+  assert.equal(await get('SELECT * FROM analysis_reviews WHERE analysis_id = ?', [inserted.lastID]), undefined);
+});
+
 const uploadDocument = async ({ data, name, type, authenticated = true }) => {
   const form = new FormData();
   form.append("file", new Blob([data], { type }), name);

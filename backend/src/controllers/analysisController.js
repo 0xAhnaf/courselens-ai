@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { auditQuestionPaper } = require('../services/assessmentEvidence');
 const { analyzeAssessment } = require("../services/ai/assessmentAgent");
 
 const runAnalysisJob = (analysisId, data) => {
@@ -124,6 +125,7 @@ exports.getAnalysisById = (req, res) => {
           console.error("Failed to parse result_json");
         }
       }
+      row.evidence_audit = auditQuestionPaper(row.question_paper_text, row.total_marks);
       res.json(row);
     }
   );
