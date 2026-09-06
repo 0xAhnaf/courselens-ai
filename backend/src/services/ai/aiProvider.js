@@ -124,7 +124,7 @@ exports.generateCompletion = async (prompt) => {
 
       const retryable =
         !status ||
-        status === 400 ||
+        jsonGenerationFailure ||
         status === 408 ||
         status === 429 ||
         status >= 500;

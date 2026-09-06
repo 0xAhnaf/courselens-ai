@@ -9,6 +9,7 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import NewAnalysisPage from './pages/NewAnalysisPage'
 import NotFoundPage from './pages/NotFoundPage'
+import ProfilePage from './pages/ProfilePage'
 import SignupPage from './pages/SignupPage'
 import './App.css'
 
@@ -25,6 +26,7 @@ function App() {
             <Route path="/analyses/new" element={<NewAnalysisPage />} />
             <Route path="/analyses/:id" element={<AnalysisResultPage />} />
             <Route path="/history" element={<AnalysisHistoryPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
         </Route>
         <Route path="/home" element={<Navigate to="/dashboard" replace />} />

@@ -4,8 +4,8 @@ const db = require("../config/db");
 
 exports.register = (req, res) => {
   const { name, email, password } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "Name, email, and password are required." });
+  if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 100 || typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email) || typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+    return res.status(400).json({ error: "Use a name of 2–100 characters, valid email, and password of at least 8 characters (maximum 72 bytes)." });
   }
 
   const hash = bcrypt.hashSync(password, 10);
@@ -31,7 +31,7 @@ exports.register = (req, res) => {
 
 exports.login = (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password || Buffer.byteLength(password, 'utf8') > 72) {
     return res.status(400).json({ error: "Email and password are required." });
   }
 

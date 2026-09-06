@@ -43,7 +43,7 @@ async function request(path, options = {}) {
   }
 
   if (!response.ok) {
-    if (response.status === 401) clearToken()
+    if (response.status === 401) { clearToken(); window.dispatchEvent(new Event('courselens-session-expired')) }
     throw new Error(normalizeError(payload, `Request failed with status ${response.status}.`))
   }
 
@@ -71,23 +71,28 @@ function deriveBalance(values) {
 }
 
 function normalizeResult(raw = {}) {
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw) } catch { raw = {} } }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) raw = {}
   const difficulty = raw.difficultyDistribution ?? raw.difficulty_distribution ?? {}
   const bloom = raw.bloomDistribution ?? raw.bloom_distribution ?? {}
-  const duplicates = raw.duplicateQuestions ?? raw.duplicate_questions ?? []
+  const asArray = (value) => Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []
+  const duplicates = asArray(raw.duplicateQuestions ?? raw.duplicate_questions)
 
   return {
     ...raw,
+    topic_coverage: asArray(raw.topic_coverage),
+    recommendations: Array.isArray(raw.recommendations) ? raw.recommendations.filter((item) => typeof item === 'string') : [],
     overallScore: raw.overallScore ?? raw.overall_score,
     coveragePercentage: raw.coveragePercentage ?? raw.coverage_percentage,
     difficultyDistribution: difficulty,
     bloomDistribution: bloom,
     difficultyBalance: raw.difficultyBalance ?? raw.difficulty_balance ?? deriveBalance(difficulty),
     bloomBalance: raw.bloomBalance ?? raw.bloom_balance ?? deriveBalance(bloom),
-    similarityRisk: raw.similarityRisk ?? raw.similarity_risk ?? (duplicates.length ? 'Needs review' : 'Low'),
-    cloCoverage: (raw.cloCoverage ?? raw.clo_coverage ?? []).map((item) => ({
+    similarityRisk: raw.similarityRisk ?? raw.similarity_risk ?? (duplicates.length ? 'Needs review' : raw.schema_version === 1 ? 'Low' : 'Unverified'),
+    cloCoverage: asArray(raw.cloCoverage ?? raw.clo_coverage).map((item) => ({
       ...item,
       code: item.code ?? item.clo,
-      title: item.title ?? item.description ?? (item.question_numbers?.length ? `Assessed in ${item.question_numbers.join(', ')}` : 'No question mapping returned'),
+      title: item.title ?? item.description ?? (Array.isArray(item.question_numbers) && item.question_numbers.length ? `Assessed in ${item.question_numbers.join(', ')}` : 'No question mapping returned'),
       status: item.status ?? (item.covered ? 'covered' : 'missing'),
     })),
     duplicateQuestions: duplicates.map((item) => ({
@@ -97,7 +102,7 @@ function normalizeResult(raw = {}) {
       similarity: item.similarity ?? item.similarity_score,
       evidence: item.evidence ?? item.recommendation,
     })),
-    detectedIssues: (raw.detectedIssues ?? raw.detected_issues ?? []).map((item) => ({
+    detectedIssues: asArray(raw.detectedIssues ?? raw.detected_issues).map((item) => ({
       ...item,
       title: item.title ?? item.issue ?? item.issue_type,
       question: item.question ?? item.question_number ?? item.related_question,
@@ -126,6 +131,10 @@ export const api = {
       if (isDemoMode) { await pause(150); return { user: demoUser } }
       return request(ENDPOINTS.me)
     },
+    async updateProfile(details) {
+      if (isDemoMode) { await pause(300); return { id: demoUser.id, name: details.name, email: demoUser.email } }
+      return request(ENDPOINTS.me, { method: 'PUT', body: JSON.stringify(details) })
+    },
     async logout() {
       if (isDemoMode) return {}
       return request(ENDPOINTS.logout, { method: 'POST' })
@@ -144,6 +153,10 @@ export const api = {
     },
   },
   analyses: {
+    async retry(id) {
+      if (isDemoMode) return { ...demoResult, id }
+      return normalizeAnalysis(await request(`${ENDPOINTS.analyses}/${id}/retry`, { method: 'POST' }))
+    },
     async list() {
       if (isDemoMode) { await pause(); return demoAnalyses }
       const payload = await request(ENDPOINTS.analyses)
@@ -155,6 +168,7 @@ export const api = {
       const payload = await request(`${ENDPOINTS.analyses}/${id}`)
       const analysis = normalizeAnalysis(payload.analysis || payload)
       const result = normalizeResult(analysis.result || analysis.result_json || {})
+      if (!analysis.previous_papers_text?.trim() && result.schema_version === 1) result.similarityRisk = 'Not assessed'
       return { ...analysis, ...result, result }
     },
     async create(details) {

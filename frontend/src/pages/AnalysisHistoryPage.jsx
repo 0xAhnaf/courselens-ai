@@ -33,7 +33,7 @@ export default function AnalysisHistoryPage() {
   const filtered = useMemo(() => analyses.filter((item) => {
     const haystack = `${item.courseCode} ${item.courseTitle} ${item.examType}`.toLowerCase()
     const matchesQuery = haystack.includes(query.trim().toLowerCase())
-    const matchesStatus = status === 'all' || String(item.status).toLowerCase().replaceAll(' ', '-') === status
+    const matchesStatus = status === 'all' || (status === 'needs-review' ? item.status === 'failed' || (item.overallScore != null && Number(item.overallScore) < 70) : String(item.status).toLowerCase().replaceAll(' ', '-') === status)
     return matchesQuery && matchesStatus
   }), [analyses, query, status])
 

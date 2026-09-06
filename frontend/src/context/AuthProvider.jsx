@@ -9,6 +9,12 @@ export default function AuthProvider({ children }) {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const expire = () => { setUser(null); navigate('/login', { replace: true }) }
+    window.addEventListener('courselens-session-expired', expire)
+    return () => window.removeEventListener('courselens-session-expired', expire)
+  }, [navigate])
+
+  useEffect(() => {
     if (!getStoredToken()) return
     api.auth.me()
       .then((response) => setUser(response.user || response))
@@ -31,6 +37,11 @@ export default function AuthProvider({ children }) {
     setUser(response.user)
     return response.user
   }
+  const updateUserProfile = async (details) => {
+    const updatedUser = await api.auth.updateProfile(details)
+    setUser((prev) => ({ ...prev, ...updatedUser }))
+    return updatedUser
+  }
 
   const logout = async () => {
     try { await api.auth.logout() } catch { /* local logout must still complete */ }
@@ -40,7 +51,7 @@ export default function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isChecking, isAuthenticated: Boolean(user), isDemoMode, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isChecking, isAuthenticated: Boolean(user), isDemoMode, login, signup, logout, updateUserProfile }}>
       {children}
     </AuthContext.Provider>
   )

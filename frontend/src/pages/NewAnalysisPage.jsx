@@ -15,11 +15,12 @@ function MaterialInput({ id, title, description, required, value, file, onTextCh
       <div className="material-card__header"><div><h3>{title} {required && <span>*</span>}</h3><p>{description}</p></div><div className="segmented"><button className={mode === 'text' ? 'is-active' : ''} onClick={() => setMode('text')} type="button">Paste text</button><button className={mode === 'file' ? 'is-active' : ''} onClick={() => setMode('file')} type="button">Upload</button></div></div>
       {mode === 'text' ? <textarea id={id} value={value} onChange={(event) => onTextChange(event.target.value)} rows="7" placeholder={`Paste ${title.toLowerCase()} here…`} /> : (
         <label className={`upload-zone ${file ? 'has-file' : ''}`} htmlFor={`${id}-file`}>
-          <input id={`${id}-file`} type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => onFileChange(event.target.files?.[0] || null)} />
+          <input id={`${id}-file`} type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => { onFileChange(event.target.files?.[0] || null); event.target.value = '' }} />
           <Icon name={file ? 'file' : 'upload'} size={25} />
           {file ? <><strong>{file.name}</strong><span>{(file.size / 1024).toFixed(1)} KB · Click to replace</span></> : <><strong>Choose a document</strong><span>PDF, DOCX or TXT · Maximum 5 MB</span></>}
         </label>
       )}
+      {value && <p className="material-count">{value.length.toLocaleString()} characters ready · Switch to Paste text to review or edit</p>}
     </article>
   )
 }
@@ -30,26 +31,27 @@ export default function NewAnalysisPage() {
   const [files, setFiles] = useState({ syllabus: null, questionPaper: null, previousPapers: null })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [extracting, setExtracting] = useState(false)
   const navigate = useNavigate()
 
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }))
   const setFile = async (field, file) => {
-    if (!file) return setFiles((current) => ({ ...current, [field]: null }))
+    if (!file || extracting) return
     const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
     if (!['.txt', '.pdf', '.docx'].includes(extension)) return setError('Choose a PDF, DOCX, or TXT document.')
     if (file.size > 5 * 1024 * 1024) return setError(`${file.name} exceeds the 5 MB limit.`)
     const textFields = { syllabus: 'syllabusText', questionPaper: 'questionPaperText', previousPapers: 'previousPapersText' }
 
     try {
+      setExtracting(true)
       setError('')
       const extracted = await api.documents.extract(file)
       if (!extracted.text?.trim()) throw new Error(`${file.name} does not contain readable text.`)
       setFiles((current) => ({ ...current, [field]: file }))
       update(textFields[field], extracted.text)
     } catch (uploadError) {
-      setFiles((current) => ({ ...current, [field]: null }))
       setError(uploadError.message)
-    }
+    } finally { setExtracting(false) }
   }
 
   const stepOneValid = useMemo(() => form.courseTitle.trim() && form.courseCode.trim() && form.department.trim() && form.examType && Number(form.totalMarks) > 0, [form])
@@ -59,10 +61,13 @@ export default function NewAnalysisPage() {
     setError('')
     if (step === 1 && !stepOneValid) return setError('Complete every required course field before continuing.')
     if (step === 2 && !stepTwoValid) return setError('Provide both the syllabus/CLOs and current question paper.')
+    if (step === 2 && [form.syllabusText, form.questionPaperText, form.previousPapersText].join('').length > 60000) return setError('Combined materials exceed 60,000 characters. Switch to Paste text and keep only relevant pages.')
     setStep((current) => Math.min(3, current + 1)); window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const submit = async () => {
+    if (extracting || submitting) return
+    if (!stepOneValid || !stepTwoValid) return setError('Complete required fields and materials first.')
     setSubmitting(true); setError('')
     const payload = {
       course_title: form.courseTitle.trim(),
@@ -99,17 +104,18 @@ export default function NewAnalysisPage() {
         <label>Total marks *<input type="number" min="1" value={form.totalMarks} onChange={(e) => update('totalMarks', e.target.value)} placeholder="100" /></label>
       </div></section>}
 
-      {step === 2 && <section className="materials-stack page-enter">
+      {extracting && <div className="faculty-notice" role="status"><span className="spinner spinner--small" /> Extracting document text…</div>}
+      {step === 2 && <fieldset disabled={extracting} className="materials-stack page-enter materials-fieldset">
         <MaterialInput id="syllabus" title="Syllabus or course learning outcomes" description="Required for coverage mapping." required value={form.syllabusText} file={files.syllabus} onTextChange={(value) => update('syllabusText', value)} onFileChange={(file) => setFile('syllabus', file)} />
         <MaterialInput id="question-paper" title="Current question paper" description="The assessment CourseLens will evaluate." required value={form.questionPaperText} file={files.questionPaper} onTextChange={(value) => update('questionPaperText', value)} onFileChange={(file) => setFile('questionPaper', file)} />
         <MaterialInput id="previous-papers" title="Previous question papers" description="Optional. Add these for similarity checking." value={form.previousPapersText} file={files.previousPapers} onTextChange={(value) => update('previousPapersText', value)} onFileChange={(file) => setFile('previousPapers', file)} />
-      </section>}
+      </fieldset>}
 
       {step === 3 && !submitting && <section className="form-panel review-panel page-enter"><div className="panel__header"><div><h2>Review before analysis</h2><p>Confirm the assessment scope and provided materials.</p></div></div><dl className="review-list"><div><dt>Course</dt><dd>{form.courseCode} · {form.courseTitle}</dd></div><div><dt>Assessment</dt><dd>{form.examType} · {form.totalMarks} marks</dd></div><div><dt>Syllabus/CLOs</dt><dd>{files.syllabus?.name || `${form.syllabusText.trim().length} characters pasted`}</dd></div><div><dt>Current paper</dt><dd>{files.questionPaper?.name || `${form.questionPaperText.trim().length} characters pasted`}</dd></div><div><dt>Previous papers</dt><dd>{files.previousPapers?.name || (form.previousPapersText.trim() ? `${form.previousPapersText.trim().length} characters pasted` : 'Not provided')}</dd></div></dl><div className="faculty-notice"><Icon name="shield" size={20} /><p><strong>Faculty-controlled review</strong><span>CourseLens provides decision support. Verify its evidence before changing an assessment.</span></p></div></section>}
 
       {submitting && <section className="processing-panel page-enter" role="status"><span className="processing-orbit"><Icon name="sparkles" size={25} /></span><h2>Analyzing your assessment</h2><p>Keep this page open while CourseLens prepares the report.</p><div className="processing-steps"><span className="is-active"><Icon name="check" size={15} /> Reading materials</span><span>Mapping course coverage</span><span>Evaluating questions</span><span>Preparing recommendations</span></div></section>}
 
-      {!submitting && <div className="form-actions"><button className="button button--secondary" disabled={step === 1} onClick={() => { setError(''); setStep((current) => current - 1) }}>Back</button>{step < 3 ? <button className="button button--primary" onClick={goNext}>Continue <Icon name="arrow" size={17} /></button> : <button className="button button--primary" onClick={submit}><Icon name="sparkles" size={17} /> Run AI analysis</button>}</div>}
+      {!submitting && <div className="form-actions"><button className="button button--secondary" disabled={step === 1 || extracting} onClick={() => { setError(''); setStep((current) => current - 1) }}>Back</button>{step < 3 ? <button disabled={extracting} className="button button--primary" onClick={goNext}>Continue <Icon name="arrow" size={17} /></button> : <button className="button button--primary" onClick={submit}><Icon name="sparkles" size={17} /> Run AI analysis</button>}</div>}
     </div>
   )
 }

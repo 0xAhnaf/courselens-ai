@@ -47,6 +47,14 @@ exports.createAnalysis = (req, res) => {
     return res.status(400).json({ error: "Missing required fields." });
   }
 
+  if (![course_title, course_code, syllabus_text, question_paper_text].every((value) => typeof value === 'string' && value.trim()) || !Number.isFinite(Number(total_marks)) || Number(total_marks) <= 0 || Number(total_marks) > 10000) {
+    return res.status(400).json({ error: 'Use valid course text and total marks between 1 and 10000.' });
+  }
+  const materials = [syllabus_text, question_paper_text, previous_papers_text || ''];
+  if (!materials.every((value) => typeof value === 'string') || materials.join('').length > 60000) {
+    return res.status(400).json({ error: 'Course materials must be text with a combined maximum of 60,000 characters. Upload only the relevant pages or edit extracted text.' });
+  }
+
   // 1. Save initial record with status = 'processing'
   const query = `
     INSERT INTO analyses 

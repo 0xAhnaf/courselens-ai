@@ -252,3 +252,41 @@ test("prevents duplicate retry jobs and clears stale results", async () => {
   assert.match(completedRow.result_json, /Test analysis completed/);
   jobDelay = 0;
 });
+
+test('rejects malformed authentication inputs without crashing', async () => {
+  for (const endpoint of ['login', 'register']) {
+    const response = await fetch(`${baseUrl}/api/auth/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: {}, email: [], password: {} }) });
+    assert.equal(response.status, 400);
+  }
+});
+
+test('register, login, and profile retrieval work end to end', async () => {
+  const details = { name: 'Faculty Test', email: 'roundtrip@example.com', password: 'test-password-123' };
+  const register = await fetch(`${baseUrl}/api/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) });
+  assert.equal(register.status, 201);
+  const registered = await register.json();
+  assert.ok(registered.token);
+  const login = await fetch(`${baseUrl}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) });
+  assert.equal(login.status, 200);
+  const signedIn = await login.json();
+  const profile = await fetch(`${baseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${signedIn.token}` } });
+  assert.equal(profile.status, 200);
+  const user = await profile.json();
+  assert.equal(user.name, details.name);
+  assert.equal(user.password_hash, undefined);
+});
+
+test('rejects oversized analysis input before creating an AI job', async () => {
+  const response = await fetch(`${baseUrl}/api/analyses`, { method: 'POST', headers: { ...authenticatedHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ course_title: 'Algorithms', course_code: 'CSE', total_marks: 50, syllabus_text: 'x'.repeat(60001), question_paper_text: 'Question 1' }) });
+  assert.equal(response.status, 400);
+});
+
+test('another faculty cannot read, delete, or retry a private analysis', async () => {
+  const created = await run("INSERT INTO analyses (user_id, course_title, course_code, total_marks, syllabus_text, question_paper_text, status) VALUES (?, 'Private', 'CSE', 50, 'syllabus', 'question', 'failed')", [userId]);
+  const otherToken = jwt.sign({ id: userId + 1000, email: 'other@example.com' }, process.env.JWT_SECRET);
+  for (const [method, suffix] of [['GET', ''], ['DELETE', ''], ['POST', '/retry']]) {
+    const response = await fetch(`${baseUrl}/api/analyses/${created.lastID}${suffix}`, { method, headers: { Authorization: `Bearer ${otherToken}` } });
+    assert.equal(response.status, 404);
+  }
+  assert.ok(await get('SELECT id FROM analyses WHERE id = ?', [created.lastID]));
+});

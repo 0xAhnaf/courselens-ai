@@ -29,9 +29,9 @@ export default function DashboardPage() {
   }, [])
 
   const metrics = useMemo(() => {
-    const scored = analyses.filter((item) => Number.isFinite(Number(item.overallScore)))
+    const scored = analyses.filter((item) => item.status === 'completed' && item.overallScore != null && Number.isFinite(Number(item.overallScore)))
     const average = scored.length ? Math.round(scored.reduce((sum, item) => sum + Number(item.overallScore), 0) / scored.length) : null
-    const needsReview = analyses.filter((item) => String(item.status).toLowerCase().includes('review') || Number(item.overallScore) < 70).length
+    const needsReview = analyses.filter((item) => item.status === 'failed' || (item.overallScore != null && Number(item.overallScore) < 70)).length
     return { total: analyses.length, average, needsReview }
   }, [analyses])
 
