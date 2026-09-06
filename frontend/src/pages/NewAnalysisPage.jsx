@@ -15,9 +15,9 @@ function MaterialInput({ id, title, description, required, value, file, onTextCh
       <div className="material-card__header"><div><h3>{title} {required && <span>*</span>}</h3><p>{description}</p></div><div className="segmented"><button className={mode === 'text' ? 'is-active' : ''} onClick={() => setMode('text')} type="button">Paste text</button><button className={mode === 'file' ? 'is-active' : ''} onClick={() => setMode('file')} type="button">Upload</button></div></div>
       {mode === 'text' ? <textarea id={id} value={value} onChange={(event) => onTextChange(event.target.value)} rows="7" placeholder={`Paste ${title.toLowerCase()} here…`} /> : (
         <label className={`upload-zone ${file ? 'has-file' : ''}`} htmlFor={`${id}-file`}>
-          <input id={`${id}-file`} type="file" accept=".txt,text/plain" onChange={(event) => onFileChange(event.target.files?.[0] || null)} />
+          <input id={`${id}-file`} type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => onFileChange(event.target.files?.[0] || null)} />
           <Icon name={file ? 'file' : 'upload'} size={25} />
-          {file ? <><strong>{file.name}</strong><span>{(file.size / 1024).toFixed(1)} KB · Click to replace</span></> : <><strong>Choose a text document</strong><span>TXT · Maximum 1 MB</span></>}
+          {file ? <><strong>{file.name}</strong><span>{(file.size / 1024).toFixed(1)} KB · Click to replace</span></> : <><strong>Choose a document</strong><span>PDF, DOCX or TXT · Maximum 5 MB</span></>}
         </label>
       )}
     </article>
@@ -35,14 +35,21 @@ export default function NewAnalysisPage() {
   const update = (field, value) => setForm((current) => ({ ...current, [field]: value }))
   const setFile = async (field, file) => {
     if (!file) return setFiles((current) => ({ ...current, [field]: null }))
-    if (!file.name.toLowerCase().endsWith('.txt')) return setError('The current backend supports TXT upload or pasted text only.')
-    if (file.size > 1024 * 1024) return setError(`${file.name} exceeds the 1 MB limit.`)
-    const text = await file.text()
-    if (!text.trim()) return setError(`${file.name} does not contain readable text.`)
+    const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
+    if (!['.txt', '.pdf', '.docx'].includes(extension)) return setError('Choose a PDF, DOCX, or TXT document.')
+    if (file.size > 5 * 1024 * 1024) return setError(`${file.name} exceeds the 5 MB limit.`)
     const textFields = { syllabus: 'syllabusText', questionPaper: 'questionPaperText', previousPapers: 'previousPapersText' }
-    setError('')
-    setFiles((current) => ({ ...current, [field]: file }))
-    update(textFields[field], text)
+
+    try {
+      setError('')
+      const extracted = await api.documents.extract(file)
+      if (!extracted.text?.trim()) throw new Error(`${file.name} does not contain readable text.`)
+      setFiles((current) => ({ ...current, [field]: file }))
+      update(textFields[field], extracted.text)
+    } catch (uploadError) {
+      setFiles((current) => ({ ...current, [field]: null }))
+      setError(uploadError.message)
+    }
   }
 
   const stepOneValid = useMemo(() => form.courseTitle.trim() && form.courseCode.trim() && form.department.trim() && form.examType && Number(form.totalMarks) > 0, [form])

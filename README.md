@@ -6,7 +6,7 @@ CourseLens AI is an academic decision-support tool that helps university faculty
 
 1. Register or sign in as a faculty member.
 2. Enter course and assessment details.
-3. Paste text or extract text from a PDF/TXT document.
+3. Paste text or extract text from a PDF, DOCX, or TXT document.
 4. Submit the assessment for asynchronous AI analysis.
 5. Review the structured report and saved analysis history.
 
@@ -96,7 +96,7 @@ npm run build
 
 ## Supported documents
 
-- Text-based PDF and UTF-8 TXT
+- Text-based PDF, DOCX, and UTF-8 TXT
 - Maximum upload size: 5 MB
 - Maximum extracted text: 250,000 characters
 - Scanned/image-only PDF OCR is not supported

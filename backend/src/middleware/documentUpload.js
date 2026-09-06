@@ -4,7 +4,11 @@ const multer = require("multer");
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const allowedMimeTypes = {
   ".pdf": new Set(["application/pdf", "application/octet-stream"]),
-  ".txt": new Set(["text/plain", "application/octet-stream"])
+  ".txt": new Set(["text/plain", "application/octet-stream"]),
+  ".docx": new Set([
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream"
+  ])
 };
 
 const upload = multer({
@@ -16,7 +20,7 @@ const upload = multer({
     const acceptedMimeTypes = allowedMimeTypes[extension];
 
     if (!acceptedMimeTypes || !acceptedMimeTypes.has(mimeType)) {
-      const error = new Error("Only PDF and TXT documents are supported.");
+      const error = new Error("Only PDF, DOCX, and TXT documents are supported.");
       error.code = "UNSUPPORTED_DOCUMENT_TYPE";
       return callback(error);
     }

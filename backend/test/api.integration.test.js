@@ -131,6 +131,20 @@ test("extracts PDF documents using the v2 parser API", async () => {
   assert.equal(body.page_count, 1);
 });
 
+test("extracts DOCX documents", async () => {
+  const fixture = fs.readFileSync(path.join(__dirname, "fixtures", "sample.docx"));
+  const response = await uploadDocument({
+    data: fixture,
+    name: "SYLLABUS.DOCX",
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.match(body.text, /CourseLens DOCX extraction test/);
+  assert.equal(body.page_count, 1);
+});
+
 test("rejects unsupported and forged document types", async () => {
   const unsupported = await uploadDocument({
     data: "not an image",
@@ -147,6 +161,15 @@ test("rejects unsupported and forged document types", async () => {
   const forgedBody = await forgedPdf.json();
   assert.equal(forgedPdf.status, 400);
   assert.match(forgedBody.error, /not a valid PDF/i);
+
+  const forgedDocx = await uploadDocument({
+    data: "This is not actually a DOCX file.",
+    name: "fake.docx",
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  });
+  const forgedDocxBody = await forgedDocx.json();
+  assert.equal(forgedDocx.status, 400);
+  assert.match(forgedDocxBody.error, /not a valid DOCX/i);
 });
 
 test("returns JSON when an uploaded file exceeds 5 MB", async () => {

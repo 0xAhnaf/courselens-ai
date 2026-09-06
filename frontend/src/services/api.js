@@ -9,6 +9,7 @@ const ENDPOINTS = {
   me: '/auth/me',
   logout: '/auth/logout',
   analyses: '/analyses',
+  extractDocument: '/documents/extract',
 }
 
 export const getStoredToken = () => localStorage.getItem(TOKEN_KEY)
@@ -128,6 +129,18 @@ export const api = {
     async logout() {
       if (isDemoMode) return {}
       return request(ENDPOINTS.logout, { method: 'POST' })
+    },
+  },
+  documents: {
+    async extract(file) {
+      if (isDemoMode) {
+        if (file.name.toLowerCase().endsWith('.txt')) return { file_name: file.name, text: await file.text(), page_count: 1 }
+        throw new Error('PDF and DOCX extraction requires the backend. Disable demo mode to test uploads.')
+      }
+
+      const form = new FormData()
+      form.append('file', file)
+      return request(ENDPOINTS.extractDocument, { method: 'POST', body: form })
     },
   },
   analyses: {

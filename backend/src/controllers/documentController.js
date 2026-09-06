@@ -1,4 +1,5 @@
 const path = require("path");
+const mammoth = require("mammoth");
 const { PDFParse } = require("pdf-parse");
 
 const MAX_EXTRACTED_CHARACTERS = 250000;
@@ -34,6 +35,13 @@ exports.extractText = async (req, res) => {
       } finally {
         await parser.destroy();
       }
+    } else if (extension === ".docx") {
+      if (buffer.subarray(0, 2).toString("ascii") !== "PK") {
+        return res.status(400).json({ error: "The uploaded file is not a valid DOCX document." });
+      }
+
+      const parsed = await mammoth.extractRawText({ buffer });
+      extractedText = parsed.value ? parsed.value.trim() : "";
     } else {
       if (buffer.includes(0)) {
         return res.status(400).json({ error: "The uploaded TXT file contains unsupported binary data." });

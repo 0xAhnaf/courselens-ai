@@ -136,7 +136,7 @@ Authentication: required.
 
 Content type: `multipart/form-data` with one field named `file`.
 
-- Accepted formats: text-based PDF and UTF-8 TXT.
+- Accepted formats: text-based PDF, DOCX, and UTF-8 TXT.
 - Maximum upload size: 5 MB.
 - Maximum extracted text: 250,000 characters.
 - Files are processed in memory and are not stored by the server.
@@ -154,7 +154,7 @@ Response `200 OK`:
 
 Errors:
 
-- `400`: missing file, unsupported type, invalid PDF, binary TXT, unreadable or password-protected document.
+- `400`: missing file, unsupported type, invalid PDF/DOCX, binary TXT, unreadable or password-protected document.
 - `401`: missing or invalid JWT.
 - `413`: file exceeds 5 MB or extracted text exceeds 250,000 characters.
 
