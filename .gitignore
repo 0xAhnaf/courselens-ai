@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+*.env.local
+
+# Databases & Build
+*.sqlite
+*.sqlite3
+data/
+dist/
+build/
+
+# Logs & OS junk
+*.log
+.DS_Store
